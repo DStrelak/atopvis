@@ -49,7 +49,8 @@ class AtopsarParser:
                 tokens[0] = timestamp
             else:
                 tokens.insert(0, timestamp)
-            data.append({k: tokens[v] for k, v in cols_dict.items()})
+            if len(tokens) >= max_inx:  # in case of missing records
+                data.append({k: tokens[v] for k, v in cols_dict.items()})
         return data
 
     @staticmethod
