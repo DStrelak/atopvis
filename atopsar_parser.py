@@ -1,9 +1,9 @@
 from atop_resource import AtopResource
+from atop_processes import AtopProcess
 import subprocess
 import logging
 import sys
 import pandas as pd
-from statistics import median
 from atop_constants import *
 
 
@@ -28,7 +28,7 @@ class AtopsarParser:
     @staticmethod
     def __parse_general(file, flags, desc, cols):
         import matplotlib.dates as dates
-        success, log = AtopsarParser.__run(f'atopsar {flags} -r {file}')
+        success, log = AtopsarParser.__run(f'atopsar {flags} -a -r {file}')
         if not success:
             LOGGER.critical(f'Could not obtain {desc} related data')
             exit(-1)
@@ -49,8 +49,26 @@ class AtopsarParser:
                 tokens[0] = timestamp
             else:
                 tokens.insert(0, timestamp)
-            if len(tokens) >= max_inx:  # in case of missing records
-                data.append({k: tokens[v] for k, v in cols_dict.items()})
+            data.append({k: tokens[v] for k, v in cols_dict.items()})
+        return data
+
+    @staticmethod
+    def __parse_processes(file, flags, desc):
+        import matplotlib.dates as dates
+        success, log = AtopsarParser.__run(f'atopsar {flags} -r {file}')
+        if not success:
+            LOGGER.critical(f'Could not obtain {desc} related data')
+            exit(-1)
+        # third line should be headers
+        # david  5.4.0-56-generic  #62-Ubuntu SMP Mon Nov 23 19:20:19 UTC 2020  x86_64  2020/12/10
+        # -------------------------- analysis date: 2020/12/02 --------------------------
+        # 17:29:24    pid command  mem% |   pid command  mem% |   pid command  mem%_top3_
+        data = {}
+        for line in log[3:]:
+            # first 8 characters are time, the rest is the line
+            time = line[:8]
+            text = line[8:]
+            data[time] = text
         return data
 
     @staticmethod
@@ -83,9 +101,6 @@ class AtopsarParser:
             drive.data_opt = data[[ATOP_TIMESTAMP, 'read', 'write']]
             drive.data_opt_unit = 'MB/s'
             result.append(drive)
-        # remove records with too few hits (we're probably not interested in them)
-        med = median([len(d.data) for d in result])
-        result = [r for r in result if len(r.data) > (med / 10)]
         return result
 
     @staticmethod
@@ -129,4 +144,15 @@ class AtopsarParser:
             name = f'{g} {gpu_type}'
             gpu = AtopResource(f'gpu: {name}', '%', data[[ATOP_TIMESTAMP, 'utilization', 'read/write', 'memused']])
             result.append(gpu)
+        return result
+
+    @staticmethod
+    def parse_processes(file):
+        disk_data = AtopsarParser.__parse_processes(file, '-D', 'disk processes')
+        cpu_data = AtopsarParser.__parse_processes(file, '-O', 'cpu processes')
+        memory_data = AtopsarParser.__parse_processes(file, '-G', 'memory processes')
+        # assume times are the same everywhere
+        result = []
+        for k, v in disk_data.items():
+            result.append(AtopProcess(k, disk_data[k], cpu_data[k], memory_data[k]))
         return result

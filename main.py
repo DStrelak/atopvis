@@ -20,7 +20,8 @@ def main(args):
             pickle.dump(report, f)
 
     if args.to_png or args.interactive:
-        MatplotlibPlotter.plot(report, args.interactive, args.to_png)
+        plotter = MatplotlibPlotter(report)
+        plotter.plot(args.interactive, args.to_png)
 
 
 def parse_args():

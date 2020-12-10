@@ -15,3 +15,4 @@ class AtopReport:
         self.resources.append(AtopsarParser.parse_memory(file))
         self.resources.extend(AtopsarParser.parse_drives(file))
         self.resources.extend(AtopsarParser.parse_gpus(file))
+        self.processes = AtopsarParser.parse_processes(file)
