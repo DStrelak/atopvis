@@ -51,7 +51,6 @@ class MatplotlibPlotter:
 
     def __on_key_press(self, event):
         if 'control' == event.key:
-            print(f'pushing {event.key}')
             self.ctrl_pushed = True
 
     def __on_key_release(self, event):
