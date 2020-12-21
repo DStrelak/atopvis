@@ -33,7 +33,7 @@ python main.py -pickle report.pck -to_png timeline.png
 ```
 
 # Interactive plot
-In addition to standard Matplotlib interactive features (zoom, pan), three most demanding processes (in terms of CPU, Disk and Memory) are show on left click. Ctrl+left click opens atop in interactive mode at specific time.
+In addition to standard Matplotlib interactive features (zoom, pan), the three most demanding processes (in terms of CPU, Disk, and Memory) are shown on the left click. Ctrl+left click opens atop in interactive mode at a specific time.
 
 # Images
 ![Screenshot from 2020-12-21 15-08-29](https://user-images.githubusercontent.com/28389367/102786364-add1c900-439f-11eb-8b0f-89754ddcf511.png)
