@@ -66,7 +66,13 @@ def parse_general(file, label):
     # split on space, except when it's between brackets
     pattern = re.compile(r'\s+(?=[^()]*(?:\(|$))')
     #pattern = re.compile(r'\s+|(\(.*?\))')
+    first_sep_found = False
     for line in log:
+        # data till first separator contain data since boot (which we don't want)
+        if not first_sep_found:
+            if line.startswith(SEP):
+                first_sep_found = True
+            continue
         if line.startswith(SEP) or line.startswith(RESET):
             continue
         tokens = pattern.split(line)
