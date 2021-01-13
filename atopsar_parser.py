@@ -76,16 +76,22 @@ class AtopsarParser:
 
     @staticmethod
     def parse_cpu(file):
-        cols = ['cpu', '%usr', '%sys']
+        cols = ['cpu', '%usr', '%sys', '%idle']
         data = AtopsarParser.__parse_general(file, '-c', 'cpu', cols)
         df = pd.DataFrame(data)
         tmp = df[df['cpu'] != 'all']['cpu']
-        no_of_cores = (pd.to_numeric(tmp).max() + 1) / 2  # assume multithreading is on, we want physical cores only
-        LOGGER.info(f'Detected {no_of_cores} cores (assuming multithreading support)')
+        no_of_cores = (pd.to_numeric(tmp).max() + 1)
+        LOGGER.info(f'Detected {no_of_cores} cores (including virtual cores)')
         df = df[df['cpu'] == 'all']
-        df.rename(columns={'%usr': 'usr', '%sys': 'sys'}, inplace=True)
-        df[['usr', 'sys']] = df[['usr', 'sys']].apply(pd.to_numeric) / no_of_cores
-        return AtopResource('cpu', '%', df, desc=f'100% means all physical cores are used.\n{no_of_cores} detected.')
+        df.rename(columns={'%usr': 'usr', '%sys': 'sys', '%idle': 'idle'}, inplace=True)
+        df[['usr', 'sys', 'idle']] = df[['usr', 'sys', 'idle']].apply(pd.to_numeric)
+        data_util = df[[ATOP_TIMESTAMP, 'usr', 'sys']].copy()
+        data_util[['usr', 'sys']] = data_util[['usr', 'sys']] / no_of_cores
+        result = AtopResource('cpu', '%', data_util, desc=f'100% means all (physical and virtual) cores are used.\n{no_of_cores} detected.')
+        result.data_opt = df[[ATOP_TIMESTAMP]].copy()
+        result.data_opt['busy cores'] = no_of_cores - df['idle'] / 100.0
+        result.data_opt_unit = 'cores'
+        return result
 
     @staticmethod
     def parse_drives(file):
