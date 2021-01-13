@@ -43,6 +43,8 @@ class AtopsarParser:
         timestamp = headers[0]
         data = []
         for line in log[3:]:
+            if 'logging restarted' in line:
+                continue
             tokens = line.split()
             if ':' in tokens[0]:
                 timestamp = dates.datestr2num(tokens[0])
