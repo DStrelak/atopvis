@@ -13,12 +13,18 @@ def __run(cmd):
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
     log = []
     while True:
-        output = p.stdout.readline().decode("utf-8").rstrip('\n')
-        if output == '' and p.poll() is not None:
-            break
-        if '' == output:
+        line = p.stdout.readline()
+        try:
+            output = line.decode("utf-8").rstrip('\n')
+            if output == '' and p.poll() is not None:
+                break
+            if '' == output:
+                continue
+            log.append(output)
+        except UnicodeError as e:
+            LOGGER.error(f'Error parsing line. Line will be skipped: {line}\nReason: {e}')
             continue
-        log.append(output)
+
     return 0 == p.poll(), log
 
 
