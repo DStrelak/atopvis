@@ -122,7 +122,7 @@ class AtopsarParser:
         df['occupancy'] = (df['memtotal'] - df['memfree']) / mem_total * 100
         # get swap usage
         swap_total = df['swptotal'][0]
-        LOGGER.info(f'Detected {mem_total} MB of swap')
+        LOGGER.info(f'Detected {swap_total} MB of swap')
         df['swap'] = (df['swptotal'] - df['swpfree']) / swap_total * 100
         # prepare result
         df = df[[ATOP_TIMESTAMP, 'allocated', 'cache', 'occupancy', 'swap']]
