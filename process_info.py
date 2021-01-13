@@ -5,7 +5,7 @@ import re
 from atop_constants import *
 
 LOGGER = logging.getLogger()
-logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 
 def __run(cmd):
@@ -105,14 +105,17 @@ def update_general(file, processes, label, fields, all_fields, fields_between_br
 
 def update_prc(file, processes):
     LOGGER.debug('update prc started')
-    update_general(file, processes, 'PRC', ['clock-ticks', 'cpu-usr', 'cpu-sys'],
+    update_general(file, processes, 'PRC', ['clock-ticks', 'cpu-usr', 'cpu-sys', 'sleep-avg'],
                    PRC_FIELDS, PRC_FIELDS_BETWEEN_BRACKETS)
     LOGGER.debug('update prc done')
 
 
 def update_prm(file, processes):
     LOGGER.debug('update prm done')
-    update_general(file, processes, 'PRM', ['data-size-kbytes', 'swap-kbytes'],
+    update_general(file, processes, 'PRM', ['mem-virt-kbytes', 'mem-res-kbytes',
+                                            'mem-virt-growth-kbytes', 'mem-res-growth-kbytes',
+                                            'page-faults-minor', 'page-faults-major',
+                                            'data-size-kbytes', 'swap-kbytes'],
                    PRM_FIELDS, PRM_FIELDS_BETWEEN_BRACKETS)
     LOGGER.debug('update prm done')
 
@@ -123,19 +126,48 @@ def update_pre(file, processes):
 
 
 def update_prd(file, processes):
-    update_general(file, processes, 'PRD', ['read-sectors', 'write-sectors'],
+    update_general(file, processes, 'PRD', ['read-sectors', 'write-sectors', 'write-cancelled'],
                    PRD_FIELDS, PRD_FIELDS_BETWEEN_BRACKETS)
 
 
-def get_statistics(processes):
+def get_statistics(processes, dest):
+    def store(d, metric):
+        if type(d) is pd.DataFrame or type(d) is pd.Series:
+            for field, value in d.items():
+                setattr(v, f'{field}-{metric}', value)
+        else:
+            setattr(v, f'{metric}', d)
+
     for k, v in processes.items():
         LOGGER.debug(f'Computing statistics for pid {k}')
         data = v.records
         if data:  # skip empty data
             df = pd.DataFrame.from_dict(data, orient='index')
-            for field, records in df.describe().items():
-                for metric, value in records.items():
-                    setattr(v, f'{field}_{metric}', value)
+            # CPU part
+            store(df[['cpu-usr', 'cpu-sys']].values.sum(), 'cpu-sum')
+            store(df[['cpu-usr', 'cpu-sys']].count(), 'intervals')
+            store(df[['cpu-usr', 'cpu-sys', 'sleep-avg']].sum(), 'sum')
+
+            # RAM part
+            store(df[['mem-virt-kbytes', 'mem-res-kbytes', 'swap-kbytes', 'data-size-kbytes',
+                         'page-faults-minor', 'page-faults-major']].max(), 'max')
+            store(df[['mem-virt-kbytes', 'mem-res-kbytes', 'swap-kbytes', 'data-size-kbytes',
+                         'page-faults-minor', 'page-faults-major']].sum(), 'sum')
+
+            store(df[['mem-virt-growth-kbytes', 'mem-res-growth-kbytes']].abs().sum(), '(de)allocation-sum')
+            store(df[['mem-virt-growth-kbytes', 'mem-res-growth-kbytes']].abs().mean(), '(de)allocation-mean')
+            tmp = df[['mem-virt-growth-kbytes', 'mem-res-growth-kbytes']]
+            store(tmp[(tmp['mem-virt-growth-kbytes'] > 0)
+                      | (tmp['mem-res-growth-kbytes'] > 0)].sum(), 'allocation-sum')
+            store(tmp[(tmp['mem-virt-growth-kbytes'] < 0)
+                      | (tmp['mem-res-growth-kbytes'] < 0)].sum(), 'deallocation-sum')
+
+            # HDD part
+            store(df[['read-sectors', 'write-sectors', 'write-cancelled']].sum(), 'sum')
+
+            # GPU part
+            store(df[['busy', 'mem-busy', 'mem-util-kb']].sum(), 'sum')
+            store(df[['mem-util-kb']].max(), 'max')
 
     def to_dict(r):
         d = vars(r)
@@ -143,29 +175,25 @@ def get_statistics(processes):
         return d
     LOGGER.debug(f'Converting to excel')
     df = pd.DataFrame.from_dict([to_dict(p) for p in processes.values()])
-    df.to_excel('test.xls')
+    df.to_excel(dest)
 
 
 def main(args):
     file = args.atop
+    destination = args.dest
     processes = parse_prg(file)
     update_prc(file, processes)
     update_prm(file, processes)
     update_pre(file, processes)
     update_prd(file, processes)
-    get_statistics(processes)
+    get_statistics(processes, destination)
 
 
 def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
-    input_group = parser.add_mutually_exclusive_group(required=True)
-    input_group.add_argument('-atop', help='path to the atop file')
-    input_group.add_argument('-pickle', help='path to pickle file')
-
-    parser.add_argument('-to_png', help='path to the png file')
-    parser.add_argument('-to_pickle', help='path to pickle')
-    parser.add_argument('-i', '--interactive', help='open interactive plot', action='store_true')
+    parser.add_argument('-atop', help='path to the atop file')
+    parser.add_argument('-dest', help='path to resulting xml file')
 
     return parser.parse_args()
 
