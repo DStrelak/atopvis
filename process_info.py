@@ -192,8 +192,8 @@ def main(args):
 def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('-atop', help='path to the atop file')
-    parser.add_argument('-dest', help='path to resulting xml file')
+    parser.add_argument('-atop', help='path to the atop file', required=True)
+    parser.add_argument('-dest', help='path to resulting xml file', required=True)
 
     return parser.parse_args()
 
