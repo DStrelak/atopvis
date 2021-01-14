@@ -178,6 +178,7 @@ def update_prd(file, processes):
 
 
 def get_statistics(processes, dest):
+    import numpy as np
     def store(d, metric):
         if type(d) is pd.DataFrame or type(d) is pd.Series:
             for field, value in d.items():
@@ -197,9 +198,9 @@ def get_statistics(processes, dest):
 
             # RAM part
             store(df[['mem-virt-kbytes', 'mem-res-kbytes', 'swap-kbytes', 'data-size-kbytes',
-                         'page-faults-minor', 'page-faults-major']].max(), 'max')
+                      'page-faults-minor', 'page-faults-major']].max(), 'max')
             store(df[['mem-virt-kbytes', 'mem-res-kbytes', 'swap-kbytes', 'data-size-kbytes',
-                         'page-faults-minor', 'page-faults-major']].sum(), 'sum')
+                      'page-faults-minor', 'page-faults-major']].sum(), 'sum')
 
             store(df[['mem-virt-growth-kbytes', 'mem-res-growth-kbytes']].abs().sum(), '(de)allocation-sum')
             store(df[['mem-virt-growth-kbytes', 'mem-res-growth-kbytes']].abs().mean(), '(de)allocation-mean')
@@ -222,8 +223,19 @@ def get_statistics(processes, dest):
         d.pop('records')
         return d
     LOGGER.debug(f'Converting to excel')
-    df = pd.DataFrame.from_dict([to_dict(p) for p in processes.values()])
-    df.to_excel(dest)
+    df = pd.DataFrame.from_dict(to_dict(p) for p in processes.values())
+    aggfunc = {'probable-duration': sum}
+    for c in df.columns.values:
+        if '-sum' in c:
+            aggfunc[c] = np.sum
+        if '-max' in c:
+            aggfunc[c] = np.max
+        if '-mean' in c:
+            aggfunc[c] = np.mean
+    table = pd.pivot_table(df, index=['name'], aggfunc=aggfunc)
+    with pd.ExcelWriter(dest) as writer:
+        table.to_excel(writer, sheet_name='overview')
+        df.to_excel(writer, sheet_name='processes')
 
 
 def main(args):
