@@ -165,23 +165,20 @@ def update_general(file, processes, label, fields, all_fields, fields_between_br
         pid = data['pid']
         epoch = data['epoch']
         processes.get(ProcessInfo.get_id(pid, epoch)).update(epoch, dict(map(kv, fields)))
+    LOGGER.debug(f'update {label} done')
 
 
 def update_prc(file, processes):
-    LOGGER.debug('update prc started')
     update_general(file, processes, 'PRC', ['clock-ticks', 'cpu-usr', 'cpu-sys', 'sleep-avg'],
                    PRC_FIELDS, PRC_FIELDS_BETWEEN_BRACKETS)
-    LOGGER.debug('update prc done')
 
 
 def update_prm(file, processes):
-    LOGGER.debug('update prm done')
     update_general(file, processes, 'PRM', ['mem-virt-kbytes', 'mem-res-kbytes',
                                             'mem-virt-growth-kbytes', 'mem-res-growth-kbytes',
                                             'page-faults-minor', 'page-faults-major',
                                             'data-size-kbytes', 'swap-kbytes'],
                    PRM_FIELDS, PRM_FIELDS_BETWEEN_BRACKETS)
-    LOGGER.debug('update prm done')
 
 
 def update_pre(file, processes):
@@ -196,6 +193,7 @@ def update_prd(file, processes):
 
 def get_statistics(processes, dest):
     import numpy as np
+
     def store(d, metric):
         if type(d) is pd.DataFrame or type(d) is pd.Series:
             for field, value in d.items():
@@ -258,7 +256,9 @@ def get_statistics(processes, dest):
 def main(args):
     file = args.atop
     destination = args.dest
+    # get processes first
     processes = parse_prg(file)
+    # get additional data
     update_prc(file, processes)
     update_prm(file, processes)
     update_pre(file, processes)
