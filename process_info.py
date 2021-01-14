@@ -87,12 +87,16 @@ class ProcessInfo:
         return str(vars(self))
 
 
-def get_token(t, tokens, fields, with_brackets):
-    index = list(fields.keys()).index(t)
-    val = tokens[index]
-    if t in with_brackets:
-        val = val.replace('(', '').replace(')', '')
-    return fields[t](val)
+def get_tokens(t, tokens, fields, with_brackets):
+    res = {}
+    keys = list(fields.keys())
+    for i in t:
+        index = keys.index(i)
+        val = tokens[index]
+        if t in with_brackets:
+            val = val.replace('(', '').replace(')', '')
+        res[i] = fields[i](val)  # cast to proper type
+    return res
 
 
 def parse_general(file, label):
@@ -120,31 +124,25 @@ def parse_general(file, label):
 
 
 def parse_prg(file):
-    def get(t):
-        return get_token(t, tokens, PRG_FIELDS, PRG_FIELDS_BETWEEN_BRACKETS)
     processes = {}
     for tokens in parse_general(file, 'PRG'):
-        pid = get('pid')
-        start = get('start')
-        time = get('epoch')
-        puuid = ProcessInfo.get_id(pid, start) or ProcessInfo.create_id(pid, start, time)
-        process = processes.setdefault(puuid, ProcessInfo(pid, get('name'), get('command'), start, get('tgid')))
-        state = get('state')
-        if 'E' in state:
-            process.set_end(time)
+        t = get_tokens(['pid', 'start', 'epoch', 'name', 'command', 'tgid', 'state'], tokens, PRG_FIELDS, PRG_FIELDS_BETWEEN_BRACKETS)
+        puuid = ProcessInfo.get_id(t['pid'], t['epoch']) or ProcessInfo.create_id(t['pid'], t['start'], t['epoch'])
+        process = processes.setdefault(puuid, ProcessInfo(t['pid'], t['name'], t['command'], t['start'], t['tgid']))
+        if 'E' in t['state']:
+            process.set_end(t['epoch'])
     LOGGER.debug(f'Detected {len(processes)} processes')
     return processes
 
 
 def update_general(file, processes, label, fields, all_fields, fields_between_brackets):
-    def get(t):
-        return get_token(t, tokens, all_fields, fields_between_brackets)
-
     def kv(k):
-        return k, get(k)
+        return k, data[k]
+    fields_to_extract = fields + ['epoch', 'pid']
     for tokens in parse_general(file, label):
-        pid = get('pid')
-        epoch = get('epoch')
+        data = get_tokens(fields_to_extract, tokens, all_fields, fields_between_brackets)
+        pid = data['pid']
+        epoch = data['epoch']
         processes.get(ProcessInfo.get_id(pid, epoch)).update(epoch, dict(map(kv, fields)))
 
 
