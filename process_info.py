@@ -52,11 +52,11 @@ class ProcessInfo:
 
     @staticmethod
     def get_id(pid, time):
-        start_times = ProcessInfo.__ids.get(pid, {})
+        start_times = ProcessInfo.__ids.get(pid, {}).keys()
         if not start_times:
             return None
         # find the most recent start time before the current time
-        start = next(t for t in start_times.keys() if time >= t)
+        start = next(t for t in start_times if time >= t)
         return ProcessInfo.__ids[pid][start]
 
     def __init__(self, pid, name, command, start, tgid):
@@ -87,19 +87,32 @@ class ProcessInfo:
         return str(vars(self))
 
 
-def get_tokens(t, tokens, fields, with_brackets):
+def get_tokens(info, tokens):
     res = {}
-    keys = list(fields.keys())
-    for i in t:
-        index = keys.index(i)
-        val = tokens[index]
-        if t in with_brackets:
+    for k, v in info.items():
+        # v = (index, replace_brackets, type)
+        val = tokens[v[0]]
+        if v[1]:
             val = val.replace('(', '').replace(')', '')
-        res[i] = fields[i](val)  # cast to proper type
+        res[k] = v[2](val)  # cast to proper type
     return res
 
 
-def parse_general(file, label):
+def get_field_info(fields, all_fields, fields_between_brackets):
+    keys = list(all_fields.keys())
+    res = {}
+    for f in fields:
+        res[f] = (keys.index(f), f in fields_between_brackets, all_fields[f])
+    return res
+
+
+def get_max_split(field_info):
+    # first position contains index
+    max_index = max([f[0] for f in field_info.values()])
+    return max_index + 1  # we need n+1 splits to get nth item (due to zero indexing)
+
+
+def parse_general(file, label, max_split):
     success, log = __run(f'atop -r {file} -P {label}')
     if not success:
         LOGGER.critical(f'Could not obtain process data for file {file} and label {label}')
@@ -119,18 +132,24 @@ def parse_general(file, label):
             LOGGER.error(f'Unexpected line format in file {file}: label \'{label}\' expected '
                          f'as a first token, instead got \'{line}\'')
             continue
-        tokens = pattern.split(line)
+        tokens = pattern.split(line, maxsplit=max_split)
         yield tokens
 
 
 def parse_prg(file):
     processes = {}
-    for tokens in parse_general(file, 'PRG'):
-        t = get_tokens(['pid', 'start', 'epoch', 'name', 'command', 'tgid', 'state'], tokens, PRG_FIELDS, PRG_FIELDS_BETWEEN_BRACKETS)
-        puuid = ProcessInfo.get_id(t['pid'], t['epoch']) or ProcessInfo.create_id(t['pid'], t['start'], t['epoch'])
-        process = processes.setdefault(puuid, ProcessInfo(t['pid'], t['name'], t['command'], t['start'], t['tgid']))
-        if 'E' in t['state']:
-            process.set_end(t['epoch'])
+    fields_to_extract = ['pid', 'start', 'epoch', 'name', 'command', 'tgid', 'state']
+    info = get_field_info(fields_to_extract, PRG_FIELDS, PRG_FIELDS_BETWEEN_BRACKETS)
+    max_split = get_max_split(info)
+    for tokens in parse_general(file, 'PRG', max_split):
+        d = get_tokens(info, tokens)
+        pid = d['pid']
+        start = d['start']
+        epoch = d['epoch']
+        puuid = ProcessInfo.get_id(pid, epoch) or ProcessInfo.create_id(pid, start, epoch)
+        process = processes.setdefault(puuid, ProcessInfo(pid, d['name'], d['command'], start, d['tgid']))
+        if 'E' in d['state']:
+            process.set_end(epoch)
     LOGGER.debug(f'Detected {len(processes)} processes')
     return processes
 
@@ -139,8 +158,10 @@ def update_general(file, processes, label, fields, all_fields, fields_between_br
     def kv(k):
         return k, data[k]
     fields_to_extract = fields + ['epoch', 'pid']
-    for tokens in parse_general(file, label):
-        data = get_tokens(fields_to_extract, tokens, all_fields, fields_between_brackets)
+    info = get_field_info(fields_to_extract, all_fields, fields_between_brackets)
+    max_split = get_max_split(info)
+    for tokens in parse_general(file, label, max_split):
+        data = get_tokens(info, tokens)
         pid = data['pid']
         epoch = data['epoch']
         processes.get(ProcessInfo.get_id(pid, epoch)).update(epoch, dict(map(kv, fields)))
