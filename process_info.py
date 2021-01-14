@@ -9,11 +9,10 @@ from atop_constants import *
 assert sys.version_info >= (3, 6)
 
 LOGGER = logging.getLogger()
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
 
 def __run(cmd):
-    LOGGER.debug('__run called')
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
     log = []
     while True:
@@ -103,7 +102,6 @@ def parse_general(file, label):
         exit(-1)
     # split on space, except when it's between brackets
     pattern = re.compile(r'\s+(?=[^()]*(?:\(|$))')
-    #pattern = re.compile(r'\s+|(\(.*?\))')
     first_sep_found = False
     for line in log:
         # data till first separator contain data since boot (which we don't want)
@@ -186,8 +184,8 @@ def get_statistics(processes, dest):
         else:
             setattr(v, f'{metric}', d)
 
+    LOGGER.debug(f'Computing statistics')
     for k, v in processes.items():
-        LOGGER.debug(f'Computing statistics for pid {k}')
         data = v.records
         if data:  # skip empty data
             df = pd.DataFrame.from_dict(data, orient='index')
