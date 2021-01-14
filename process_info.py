@@ -2,7 +2,11 @@ import subprocess
 import pandas as pd
 import logging
 import re
+import uuid
 from atop_constants import *
+
+# since Python 3.6, dicts keep insertion order
+assert sys.version_info >= (3, 6)
 
 LOGGER = logging.getLogger()
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
@@ -29,13 +33,41 @@ def __run(cmd):
 
 
 class ProcessInfo:
-    def __init__(self, pid, name, command, start):
+    __ids = {}
+
+    @staticmethod
+    def create_id(pid, start, time):
+        v = ProcessInfo.__ids.setdefault(pid, {})
+        # sometimes there might be discrepancy between the current time and the start time, example:
+        #                V                                                             V
+        # PRG david 1606905905 2020/12/02 11:45:05 1 4066 (atopgpud) S 0 0 996 1 0 1606905906 () 1 0 1 0 0 0 0 0 0 0 0 n 0 0 -
+        t = start
+        if start > time:
+            LOGGER.warning(f'start time {start} for pid {pid} is later than the current time {time}')
+            t = time
+        v[t] = uuid.uuid4()
+        # store start times sorted from the newest (biggest) to smallest
+        # keep insertion order
+        ProcessInfo.__ids[pid] = dict(sorted(v.items(), key=lambda item: item[0], reverse=True))
+        return v[t]
+
+    @staticmethod
+    def get_id(pid, time):
+        start_times = ProcessInfo.__ids.get(pid, {})
+        if not start_times:
+            return None
+        # find the most recent start time before the current time
+        start = next(t for t in start_times.keys() if time >= t)
+        return ProcessInfo.__ids[pid][start]
+
+    def __init__(self, pid, name, command, start, tgid):
         self.pid = pid
         self.name = name
         self.command = command
         self.start = start  # epoch
         self.end = None  # epoch
         self.records = {}
+        self.tgid = tgid
 
     def update(self, time, data: dict):
         if time not in self.records:
@@ -45,6 +77,12 @@ class ProcessInfo:
 
     def set_end(self, end):
         self.end = end
+
+    def get_end(self):
+        if self.end:
+            return self.end
+        # assume process finished after last record
+        return max(self.records.keys()) + 1
 
     def __repr__(self):
         return str(vars(self))
@@ -75,6 +113,10 @@ def parse_general(file, label):
             continue
         if line.startswith(SEP) or line.startswith(RESET):
             continue
+        if not line.startswith(label):
+            LOGGER.error(f'Unexpected line format in file {file}: label \'{label}\' expected '
+                         f'as a first token, instead got \'{line}\'')
+            continue
         tokens = pattern.split(line)
         yield tokens
 
@@ -85,10 +127,14 @@ def parse_prg(file):
     processes = {}
     for tokens in parse_general(file, 'PRG'):
         pid = get('pid')
-        process = processes.setdefault(pid, ProcessInfo(pid, get('name'), get('command'), get('start')))
+        start = get('start')
+        time = get('epoch')
+        puuid = ProcessInfo.get_id(pid, start) or ProcessInfo.create_id(pid, start, time)
+        process = processes.setdefault(puuid, ProcessInfo(pid, get('name'), get('command'), start, get('tgid')))
         state = get('state')
         if 'E' in state:
-            process.set_end(get('epoch'))
+            process.set_end(time)
+    LOGGER.debug(f'Detected {len(processes)} processes')
     return processes
 
 
@@ -99,8 +145,9 @@ def update_general(file, processes, label, fields, all_fields, fields_between_br
     def kv(k):
         return k, get(k)
     for tokens in parse_general(file, label):
-        process = processes[get('pid')]
-        process.update(get('epoch'), dict(map(kv, fields)))
+        pid = get('pid')
+        epoch = get('epoch')
+        processes.get(ProcessInfo.get_id(pid, epoch)).update(epoch, dict(map(kv, fields)))
 
 
 def update_prc(file, processes):
@@ -171,6 +218,7 @@ def get_statistics(processes, dest):
 
     def to_dict(r):
         d = vars(r)
+        d['probable-duration'] = r.get_end() - r.start
         d.pop('records')
         return d
     LOGGER.debug(f'Converting to excel')
