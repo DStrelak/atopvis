@@ -63,9 +63,10 @@ class MatplotlibPlotter:
 
     def __show_process_annotation(self, time, time_num):
         text = str(self.annotation_texts[time])
-        routines = [r[0] for r in self.__get_running_routine(time_num)]
-        text += f"""\n\nRoutines:\n{','.join(routines)}\n"""
-        text += 'Press Ctrl+Click to open atop'
+        if self.report.timeline is not None:
+            routines = [r[0] for r in self.__get_running_routine(time_num)]
+            text += f"""\n\nRoutines:\n{','.join(routines)}"""
+        text += '\nPress Ctrl+Click to open atop'
         self.last_annotation.set_text(text)
         self.last_annotation.set_visible(True)
         self.fig.canvas.draw_idle()
