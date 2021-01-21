@@ -40,7 +40,7 @@ class AtopsarParser:
         cols_dict = {c: headers.index(c) for c in cols}
         max_inx = max(cols_dict.values())
         cols_dict[ATOP_TIMESTAMP] = 0
-        timestamp = headers[0]
+        timestamp = headers[0]  # notice that since we don't specify date (just time), datatime.now().date() is assumed
         data = []
         for line in log[3:]:
             if 'logging restarted' in line:

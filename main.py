@@ -1,20 +1,25 @@
 import pickle
 from atop_report import AtopReport
+from scipion_timeline import ScipionTimeline
 from matplotlib_plotter import MatplotlibPlotter
 
 
 def load_report(args):
+    report = None
     atop_file = args.atop
     if atop_file:
-        return AtopReport(atop_file)
-    pickle_file = args.pickle
-    if pickle_file:
-        with open(pickle_file, 'rb') as f:
-            return pickle.load(f)
+        report = AtopReport(atop_file)
+    elif args.pickle:
+        with open(args.pickle, 'rb') as f:
+            report = pickle.load(f)
+    if args.timeline:
+        report.timeline = ScipionTimeline(args.timeline)
+    return report
 
 
 def main(args):
     report = load_report(args)
+
     if args.to_pickle:
         with open(args.to_pickle, 'wb') as f:
             pickle.dump(report, f)
@@ -34,6 +39,7 @@ def parse_args():
     parser.add_argument('-to_png', help='path to the png file')
     parser.add_argument('-to_pickle', help='path to pickle')
     parser.add_argument('-i', '--interactive', help='open interactive plot', action='store_true')
+    parser.add_argument('-timeline', help='path to a file used to generate timeline')
 
     return parser.parse_args()
 

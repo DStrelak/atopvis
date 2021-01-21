@@ -16,3 +16,4 @@ class AtopReport:
         self.resources.extend(AtopsarParser.parse_drives(file))
         self.resources.extend(AtopsarParser.parse_gpus(file))
         self.processes = AtopsarParser.parse_processes(file)
+        self.timeline = None
