@@ -28,6 +28,7 @@ class AtopsarParser:
     @staticmethod
     def __parse_general(file, flags, desc, cols):
         import matplotlib.dates as dates
+        import re
         success, log = AtopsarParser.__run(f'atopsar {flags} -a -r {file}')
         if not success:
             LOGGER.critical(f'Could not obtain {desc} related data')
@@ -42,11 +43,12 @@ class AtopsarParser:
         cols_dict[ATOP_TIMESTAMP] = 0
         timestamp = headers[0]  # notice that since we don't specify date (just time), datatime.now().date() is assumed
         data = []
+        TIME_RE = re.compile(r"^\d{2}:\d{2}:\d{2}$")
         for line in log[3:]:
             if 'logging restarted' in line:
                 continue
             tokens = line.split()
-            if ':' in tokens[0]:
+            if TIME_RE.match(tokens[0]):
                 timestamp = dates.datestr2num(tokens[0])
                 tokens[0] = timestamp
             else:
@@ -60,6 +62,8 @@ class AtopsarParser:
         import matplotlib.dates as dates
         success, log = AtopsarParser.__run(f'atopsar {flags} -r {file}')
         if not success:
+            if 'no per-process disk counters available' in log[-1]:
+                return {}
             LOGGER.critical(f'Could not obtain {desc} related data')
             exit(-1)
         # third line should be headers
@@ -149,7 +153,7 @@ class AtopsarParser:
         df.rename(columns={'gpubusy': 'utilization', 'membusy': 'read/write', 'memocc': 'memused'}, inplace=True)
         result = []
         for g, data in df.groupby('busaddr'):
-            gpu_type = data['gputype'][0]
+            gpu_type = data['gputype'].iloc[0]
             name = f'{g} {gpu_type}'
             gpu = AtopResource(f'gpu: {name}', '%', data[[ATOP_TIMESTAMP, 'utilization', 'read/write', 'memused']])
             result.append(gpu)
@@ -161,7 +165,9 @@ class AtopsarParser:
         cpu_data = AtopsarParser.__parse_processes(file, '-O', 'cpu processes')
         memory_data = AtopsarParser.__parse_processes(file, '-G', 'memory processes')
         # assume times are the same everywhere
+        all_keys = set(disk_data) | set(cpu_data) | set(memory_data)
         result = []
-        for k, v in disk_data.items():
-            result.append(AtopProcess(k, disk_data[k], cpu_data[k], memory_data[k]))
+        NA = ''
+        for k in all_keys:
+            result.append(AtopProcess(k, disk_data.get(k, NA), cpu_data.get(k, NA), memory_data.get(k, NA)))
         return result

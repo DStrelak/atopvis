@@ -21,9 +21,11 @@ class MatplotlibPlotter:
                                            textcoords="offset points",
                                            bbox=dict(boxstyle="round", fc="w", alpha=0.85),
                                            arrowprops=dict(arrowstyle="->"))
+        self.last_annotation.set_zorder = sys.float_info.max # make sure that the annotation is always on top
         # Put the annotation in the figure instead of the axes so that it will be on
         # top of other subplots.
-        ax.figure.texts.append(ax.texts.pop())
+        text = ax.texts[0] # not sure about this ...
+        ax.figure.texts.append(text) # https://stackoverflow.com/a/75722122
         self.last_annotation.set_visible(False)
 
     def __set(self, ax, ylabel, data):
@@ -62,7 +64,13 @@ class MatplotlibPlotter:
             self.ctrl_pushed = False
 
     def __show_process_annotation(self, time, time_num):
-        text = str(self.annotation_texts[time])
+        from datetime import datetime
+        def to_time(s):
+            return datetime.strptime(s, "%H:%M:%S")
+        key = to_time(time)
+        # find closes available timestamp in the data
+        closest_key = min(self.annotation_texts.keys(), key=lambda k: abs(to_time(k) - key))
+        text = str(self.annotation_texts[closest_key])
         if self.report.timeline is not None:
             routines = [r[0] for r in self.__get_running_routine(time_num)]
             text += f"""\n\nRoutines:\n{','.join(routines)}"""
@@ -119,6 +127,7 @@ class MatplotlibPlotter:
             self.fig.canvas.draw_idle()
         else:
             self.ctrl_pushed = False  # otherwise if user releases Ctrl in terminal, we won't get the event
+            time = time[0:5].replace(':', '') # now the time format needs to be in HHMM format with no seconds
             subprocess.call(f'gnome-terminal --maximize -- atop -b {time} -r {file}', shell=True)
 
     def __on_pick(self, event):
